@@ -1,0 +1,30 @@
+name: Copy pinned Coral vendor LFS objects
+on:
+  push:
+    paths: [.github/workflows/sync-lfs.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: vendor-lfs-import
+  cancel-in-progress: false
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          lfs: false
+      - name: Copy the exact source revision's LFS payloads
+        env:
+          SOURCE_SHA: fc4a5b6b20c40954c2ad99d543f8c1e61e86d03a
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git remote add pixelos-lfs https://github.com/its-hecker/pixelos_proprietary_vendor_google_coral.git
+          git fetch --no-tags --depth=1 pixelos-lfs "$SOURCE_SHA"
+          git lfs fetch pixelos-lfs "$SOURCE_SHA"
+          git lfs push --all origin main
+          git lfs fsck --objects main
