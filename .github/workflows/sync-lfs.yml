@@ -1,4 +1,4 @@
-name: Copy pinned Coral vendor LFS objects
+name: Verify pinned Coral vendor LFS payloads
 on:
   push:
     paths: [.github/workflows/sync-lfs.yml]
@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
           lfs: false
-      - name: Copy the exact source revision's LFS payloads
+      - name: Resolve and verify the retained public LFS payloads
         env:
           SOURCE_SHA: fc4a5b6b20c40954c2ad99d543f8c1e61e86d03a
         run: |
@@ -26,5 +26,20 @@ jobs:
           git remote add pixelos-lfs https://github.com/its-hecker/pixelos_proprietary_vendor_google_coral.git
           git fetch --no-tags --depth=1 pixelos-lfs "$SOURCE_SHA"
           git lfs fetch pixelos-lfs "$SOURCE_SHA"
-          git lfs push --all origin main
+          # .lfsconfig retains the same public read endpoint used by PixelOS.
+          # These stock radio images do not require upload credentials.
+          git lfs fetch origin main
+          git lfs checkout
           git lfs fsck --objects main
+          python3 - <<'PY'
+          import hashlib, re
+          from pathlib import Path
+          text = Path("Android.mk").read_text()
+          images = re.findall(r"add-radio-file-sha1-checked,(radio/[^,]+),([0-9a-f]{40})", text)
+          assert len(images) == 11
+          for name, expected in images:
+              data = Path(name).read_bytes()
+              assert not data.startswith(b"version https://git-lfs.github.com/spec/v1")
+              assert hashlib.sha1(data).hexdigest() == expected, name
+          print("All 11 Coral radio payloads resolve and match the original Android.mk hashes.")
+          PY
