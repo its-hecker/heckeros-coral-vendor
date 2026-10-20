@@ -1,0 +1,46 @@
+name: Import verified PixelOS vendor snapshot
+on:
+  push:
+    paths: [.github/workflows/import-source.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: source-import
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          lfs: false
+      - name: Import the exact source tree once
+        env:
+          SOURCE_SHA: fc4a5b6b20c40954c2ad99d543f8c1e61e86d03a
+        run: |
+          set -euo pipefail
+          if git cat-file -e HEAD:UPSTREAM_SOURCE.json 2>/dev/null; then
+            echo "Source already imported; no changes made."
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 https://github.com/its-hecker/pixelos_proprietary_vendor_google_coral.git "$SOURCE_SHA"
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_SHA"
+          cp .github/workflows/import-source.yml /tmp/hecker-import-source.yml
+          git read-tree --reset "$SOURCE_SHA^{tree}"
+          mkdir -p .github/workflows
+          cp /tmp/hecker-import-source.yml .github/workflows/import-source.yml
+          cat > UPSTREAM_SOURCE.json <<'ORIGIN'
+          {
+            "repository": "its-hecker/pixelos_proprietary_vendor_google_coral",
+            "revision": "fc4a5b6b20c40954c2ad99d543f8c1e61e86d03a",
+            "import": "Exact Git tree snapshot; original file modes, symlinks and submodule pins retained",
+            "target": "coral",
+            "rom_features": "Owned by its-hecker/HeckerOS, not this hardware repository"
+          }
+          ORIGIN
+          git add .github/workflows/import-source.yml UPSTREAM_SOURCE.json
+          git -c user.name='HeckerOS source import' -c user.email='source-import@heckeros.local' commit -m 'Import pinned PixelOS coral vendor sources for HeckerOS'
+          git push origin HEAD:main
